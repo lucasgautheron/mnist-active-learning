@@ -49,14 +49,14 @@ class BayesianClassifier(nn.Module):
         self.layers = nn.Sequential(
             nn.Linear(input_size, 256),
             nn.ReLU(),
-            nn.Dropout(dropout_rate),
-            nn.Linear(256, 128),
-            nn.ReLU(),
+            # nn.Dropout(dropout_rate),
+            # nn.Linear(256, 128),
+            # nn.ReLU(),
             # nn.Dropout(dropout_rate),
             # nn.Linear(128, 64),
             # nn.ReLU(),
             nn.Dropout(dropout_rate),
-            nn.Linear(128, num_classes),
+            nn.Linear(256, num_classes),
         )
 
     def forward(self, x):
@@ -247,6 +247,18 @@ class ActiveLearning:
             # Compute BALD scores
             bald_scores = self._compute_bald_scores(candidates_data)
 
+            if len(bald_scores) > 0:
+                # Select candidate with highest BALD score
+                best_idx = np.argmax(bald_scores)
+                selected_node_id = list(candidates_data.keys())[best_idx]
+
+                logger.info(
+                    f"Selected node {selected_node_id} with BALD score {bald_scores[best_idx]:.4f}",
+                )
+            else:
+                selected_node_id = candidates[0]
+
+
             self.model.eval()
             test_nodes = set(self.dataset.index.values)
             X_test = [self.embeddings[node] for node in test_nodes]
@@ -265,7 +277,9 @@ class ActiveLearning:
                 writer = csv.writer(file)
                 writer.writerow(
                     [
+                        len(y_train),
                         accuracy,
+                        self.labels[data["nodes"][selected_node_id]["x"]]
                     ],
                 )
 
@@ -276,17 +290,7 @@ class ActiveLearning:
             # sns.heatmap(confusion, cmap="Reds")
             # plt.show()
 
-            if len(bald_scores) > 0:
-                # Select candidate with highest BALD score
-                best_idx = np.argmax(bald_scores)
-                selected_node_id = list(candidates_data.keys())[best_idx]
-
-                logger.info(
-                    f"Selected node {selected_node_id} with BALD score {bald_scores[best_idx]:.4f}",
-                )
-
-                # Find and return the actual candidate node
-                return selected_node_id
+            return selected_node_id
 
         # Fallback: return first candidate if active learning fails
         logger.info("Active learning failed, using fallback selection")
@@ -294,13 +298,8 @@ class ActiveLearning:
 
 
 class ImageNode(StaticNode):
-    # @declared_attr
-    # def embedding(cls):
-    #     return cls.__table__.c.get("embedding", Column(LargeBinary))
-
     def __init__(self, *args, embedding, **kwargs):
         super().__init__(*args, **kwargs)
-        # self.embedding = np.array(embedding, dtype=np.float32).tobytes()
 
 
 images = pd.read_parquet("static/mnist_complete_embeddings.parquet")
@@ -325,7 +324,7 @@ nodes = [
 
 
 class ImageTrialMaker(StaticTrialMaker):
-    def __init__(self, *args, optimizer = None, **kwargs):
+    def __init__(self, *args, optimizer=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.optimizer = optimizer() if optimizer is not None else None
 
@@ -403,7 +402,9 @@ class ImageTrialMaker(StaticTrialMaker):
             list(node_network.keys()), participant, data,
         )
 
-        return [networks[node_network[next_node]]]
+        return [
+            networks[node_network[next_node]],
+        ] if SETUP == "adaptive" else networks
 
     def finalize_trial(
             self,
@@ -448,12 +449,11 @@ class Exp(psynet.experiment.Experiment):
             id_="image_classification",
             trial_class=ImageTrial,
             nodes=nodes,
-            max_trials_per_participant=100,
-            expected_trials_per_participant=100,
+            max_trials_per_participant=200,
+            expected_trials_per_participant=200,
             target_n_participants=1,
             recruit_mode="n_participants",
-            optimizer=ActiveLearning if SETUP == "adaptive" else None,
-
+            optimizer=ActiveLearning,
         ),
     )
 
