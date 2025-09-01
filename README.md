@@ -8,8 +8,8 @@ This strategy consists in choosing samples for which the classifier prediction i
 The uncertainty of the model is assessed by leveraging [Dropout layers](https://arxiv.org/abs/1506.02142).
 
 <div style="display: flex; justify-content: space-around;">
-  <img src="output/MNIST.png" alt="MNIST" width="45%">
+  <img src="output/demo.gif" alt="demo" width="45%">
   <img src="output/active_vs_static.png" alt="Performance" width="45%">
 </div>
 
-<div style="justify-content: space-around;"><img src="output/demo.gif" alt="demo" width="45%"></div>
+<div style="justify-content: space-around;"><img src="output/MNIST.png" alt="MNIST" width="45%"></div>
