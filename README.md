@@ -11,3 +11,5 @@ The uncertainty of the model is assessed by leveraging [Dropout layers](https://
   <img src="output/MNIST.png" alt="MNIST" width="45%">
   <img src="output/active_vs_static.png" alt="Performance" width="45%">
 </div>
+
+<div style="justify-content: space-around;"><img src="output/demo.gif" alt="demo" width="45%"></div>
