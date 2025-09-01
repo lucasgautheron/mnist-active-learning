@@ -1,0 +1,226 @@
+<!-- Value display above the slider -->
+<div id="slider-value-display"
+     style="text-align: center; margin: 10px 0; font-size: 18px; font-weight: bold; color: #333;">
+    Rating: <span id="current-value">{{ params.start_value }}</span>
+</div>
+
+<script>
+    console.log("=== SLIDER DEBUG: Template loaded ===");
+
+    function addSliderLabels(sliderId, leftText, rightText) {
+        console.log("=== SLIDER DEBUG: Adding labels ===", {sliderId, leftText, rightText});
+
+        const slider = document.getElementById(sliderId);
+        if (!slider) {
+            console.log("ERROR: Slider not found for adding labels");
+            return;
+        }
+
+        // Check if labels already exist
+        const existingLeftLabel = document.getElementById(sliderId + '_left_label');
+        const existingRightLabel = document.getElementById(sliderId + '_right_label');
+
+        if (existingLeftLabel && existingRightLabel) {
+            console.log("Labels already exist, updating text");
+            existingLeftLabel.textContent = leftText;
+            existingRightLabel.textContent = rightText;
+            return;
+        }
+
+        // Create a container div to wrap the slider and labels
+        const container = document.createElement('div');
+        container.style.cssText = `
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            margin: 10px 0;
+            width: 100%;
+        `;
+
+        // Create left label
+        const leftLabel = document.createElement('div');
+        leftLabel.id = sliderId + '_left_label';
+        leftLabel.textContent = leftText;
+        leftLabel.style.cssText = `
+            font-size: 14px;
+            font-weight: bold;
+            color: #666;
+            min-width: 80px;
+            text-align: center;
+            flex-shrink: 0;
+        `;
+
+        // Create right label
+        const rightLabel = document.createElement('div');
+        rightLabel.id = sliderId + '_right_label';
+        rightLabel.textContent = rightText;
+        rightLabel.style.cssText = `
+            font-size: 14px;
+            font-weight: bold;
+            color: #666;
+            min-width: 80px;
+            text-align: center;
+            flex-shrink: 0;
+        `;
+
+        // Create wrapper for the slider
+        const sliderWrapper = document.createElement('div');
+        sliderWrapper.style.cssText = `
+            flex: 1;
+            max-width: 300px;
+        `;
+
+        // Get the slider's parent and insert the container
+        const sliderParent = slider.parentNode;
+        sliderParent.insertBefore(container, slider);
+
+        // Move slider into the wrapper and assemble the structure
+        sliderWrapper.appendChild(slider);
+        container.appendChild(leftLabel);
+        container.appendChild(sliderWrapper);
+        container.appendChild(rightLabel);
+
+        console.log("Labels added successfully");
+    }
+
+    // Function to update the displayed value
+    function updateSliderValue() {
+        console.log("=== SLIDER DEBUG: updateSliderValue called ===");
+        const slider = document.getElementById('{{ params.slider_id }}');
+        const valueDisplay = document.getElementById('current-value');
+
+        console.log("Slider element:", slider);
+        console.log("Value display element:", valueDisplay);
+
+        if (slider && valueDisplay) {
+            const currentValue = Math.round(parseFloat(slider.value) * 10) / 10;
+            console.log("Current slider value:", slider.value, "-> Rounded:", currentValue);
+            valueDisplay.textContent = currentValue;
+        } else {
+            console.log("ERROR: Could not find slider or value display element");
+        }
+    }
+
+    // Check what slider functions exist
+    function checkSliderFunctions() {
+        console.log("=== SLIDER DEBUG: Available functions ===");
+        console.log("window.sliderOnInput:", typeof window.sliderOnInput);
+        console.log("window.sliderOnChange:", typeof window.sliderOnChange);
+        console.log("All window properties containing 'slider':",
+            Object.getOwnPropertyNames(window).filter(name => name.toLowerCase().includes('slider'))
+        );
+    }
+
+    // Try multiple approaches to hook into slider events
+
+    // Approach 1: Direct event listeners
+    function setupDirectListeners() {
+        console.log("=== SLIDER DEBUG: Setting up direct listeners ===");
+        const slider = document.getElementById('{{ params.slider_id }}');
+        if (slider) {
+            slider.addEventListener('input', function () {
+                console.log("Direct input event fired");
+                updateSliderValue();
+            });
+            slider.addEventListener('change', function () {
+                console.log("Direct change event fired");
+                updateSliderValue();
+            });
+            console.log("Direct listeners added successfully");
+        } else {
+            console.log("ERROR: Slider not found for direct listeners");
+        }
+    }
+
+    // Approach 2: Hook into existing functions (with safety checks)
+    function hookExistingFunctions() {
+        console.log("=== SLIDER DEBUG: Attempting to hook existing functions ===");
+
+        // Store original functions if they exist
+        const originalSliderOnInput = window.sliderOnInput;
+        const originalSliderOnChange = window.sliderOnChange;
+
+        // Override sliderOnInput
+        window.sliderOnInput = function () {
+            console.log("Hooked sliderOnInput called");
+            if (typeof originalSliderOnInput === 'function') {
+                originalSliderOnInput();
+            }
+            updateSliderValue();
+        };
+
+        // Override sliderOnChange
+        window.sliderOnChange = function () {
+            console.log("Hooked sliderOnChange called");
+            if (typeof originalSliderOnChange === 'function') {
+                originalSliderOnChange();
+            }
+            updateSliderValue();
+        };
+
+        console.log("Function hooks installed");
+    }
+
+    // Approach 3: Use PsyNet events
+    function setupPsyNetEvents() {
+        console.log("=== SLIDER DEBUG: Setting up PsyNet events ===");
+
+        // Check if psynet exists
+        if (typeof psynet !== 'undefined' && psynet.trial) {
+            psynet.trial.onEvent("trialPrepare", function () {
+                console.log("PsyNet trialPrepare event fired");
+                updateSliderValue();
+                setupDirectListeners();
+            });
+
+            psynet.trial.onEvent("trialConstruct", function () {
+                console.log("PsyNet trialConstruct event fired");
+                updateSliderValue();
+                checkSliderFunctions();
+                hookExistingFunctions();
+            });
+
+            console.log("PsyNet event listeners added");
+        } else {
+            console.log("ERROR: PsyNet not available");
+        }
+    }
+
+    // Initialize everything
+    console.log("=== SLIDER DEBUG: Starting initialization ===");
+
+    // Run immediately
+    setTimeout(function () {
+        console.log("=== SLIDER DEBUG: Delayed initialization (100ms) ===");
+        checkSliderFunctions();
+        updateSliderValue();
+        setupDirectListeners();
+        hookExistingFunctions();
+    }, 100);
+
+    // Also run when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () {
+            console.log("=== SLIDER DEBUG: DOM Content Loaded ===");
+            checkSliderFunctions();
+            updateSliderValue();
+            setupDirectListeners();
+            hookExistingFunctions();
+            addSliderLabels('{{ params.slider_id }}', 'Very ugly', 'Very pretty');
+
+        });
+    }
+
+    // Set up PsyNet events
+    setupPsyNetEvents();
+
+    // Fallback: Try again after a longer delay
+    setTimeout(function () {
+        console.log("=== SLIDER DEBUG: Final fallback (1000ms) ===");
+        checkSliderFunctions();
+        updateSliderValue();
+        setupDirectListeners();
+        hookExistingFunctions();
+    }, 1000);
+</script>

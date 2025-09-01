@@ -1,0 +1,13 @@
+[Config]
+title = MNIST
+description = MNIST
+contact_email_on_error = lucas.gautheron@gmail.com
+organization_name = XXX
+
+recruiter = hotair
+currency = $
+wage_per_hour = 0.0
+
+initial_recruitment_size = 3
+allow_mobile_devices = False
+# auto_recruit = False
