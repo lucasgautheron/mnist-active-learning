@@ -11,6 +11,7 @@ server.log
 
 # Automatically generated resources for running experiments with assets
 static/assets
+static/images
 
 # Experiment source code snapshot created in `Experiment.pre_deploy`
 source_code.zip
