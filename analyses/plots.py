@@ -11,18 +11,26 @@ adaptive = load_df("output/utility_adaptive.csv")
 static = load_df("output/utility_static.csv")
 
 stats_adaptive = adaptive.groupby("n_samples").agg(
-    min=("accuracy", "min"), max=("accuracy", "max"),
+    min=("accuracy", "min"), max=("accuracy", "max"), mean=("accuracy", "mean"),
 )
 stats_static = static.groupby("n_samples").agg(
-    min=("accuracy", "min"), max=("accuracy", "max"),
+    min=("accuracy", "min"), max=("accuracy", "max"), mean=("accuracy", "mean"),
 )
 
 plt.fill_between(
     stats_adaptive.index, stats_adaptive["min"], stats_adaptive["max"],
-    alpha=0.5, label="Bayesian active learning",
+    alpha=0.5,
 )
+plt.plot(
+    stats_adaptive.index, stats_adaptive["mean"], lw=3,
+    label="Bayesian active learning",
+)
+
 plt.fill_between(
     stats_static.index, stats_static["min"], stats_static["max"], alpha=0.5,
+)
+plt.plot(
+    stats_static.index, stats_static["mean"], lw=3,
     label="Random sample selection",
 )
 plt.xlabel("Number of trials")
