@@ -23,47 +23,20 @@ from sqlalchemy.ext.declarative import declared_attr
 
 import numpy as np
 import pandas as pd
-
-logging.basicConfig(
-    level=logging.DEBUG,
-)
-logger = logging.getLogger()
-
-# pylint: disable=unused-import,abstract-method
-
-import logging
-
-import psynet.experiment
-
-from psynet.asset import asset, CachedAsset  # noqa
-from psynet.bot import Bot
-from psynet.modular_page import (
-    ModularPage,
-    ImagePrompt,
-    DropdownControl,
-)
-from psynet.experiment import Participant
-from psynet.timeline import Timeline, ModuleState
-
-from psynet.trial.main import Trial
-from psynet.trial.static import StaticNode, StaticTrial, StaticTrialMaker
-
-from dallinger import db
-from sqlalchemy import Column, LargeBinary, Integer
-from sqlalchemy.ext.declarative import declared_attr
-
-import numpy as np
-import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from sklearn.preprocessing import StandardScaler
 from collections import defaultdict
 
+import csv
+
 logging.basicConfig(
     level=logging.DEBUG,
 )
 logger = logging.getLogger()
+
+SETUP = "adaptive"
 
 
 class BayesianClassifier(nn.Module):
@@ -79,11 +52,11 @@ class BayesianClassifier(nn.Module):
             nn.Dropout(dropout_rate),
             nn.Linear(256, 128),
             nn.ReLU(),
+            # nn.Dropout(dropout_rate),
+            # nn.Linear(128, 64),
+            # nn.ReLU(),
             nn.Dropout(dropout_rate),
-            nn.Linear(128, 64),
-            nn.ReLU(),
-            nn.Dropout(dropout_rate),
-            nn.Linear(64, num_classes),
+            nn.Linear(128, num_classes),
         )
 
     def forward(self, x):
@@ -114,6 +87,15 @@ class ActiveLearning:
         )
         self.model.to(self.device)
 
+        self.dataset = pd.read_parquet(
+            "static/mnist_complete_embeddings.parquet",
+        ).set_index("dataset_index")
+        self.embeddings = self.dataset[
+            "clip_embedding"].apply(
+            lambda x: np.array(x, dtype=np.float32),
+        ).to_dict()
+        self.labels = self.dataset["label"].to_dict()
+
     def _prepare_training_data(self, data):
         """Extract and prepare training data from the data structure"""
         X_train = []
@@ -121,7 +103,7 @@ class ActiveLearning:
 
         for node_id, node_data in data["nodes"].items():
             if "x" in node_data:
-                embedding = node_data["x"].flatten()  # CLIP embedding
+                embedding = self.embeddings[node_data["x"]]
 
                 # Collect all labels for this node from different trials
                 labels = []
@@ -179,7 +161,7 @@ class ActiveLearning:
         logger.info(f"Model trained on {len(X_train)} samples")
         return True
 
-    def _compute_bald_scores(self, candidates_data, n_samples=50):
+    def _compute_bald_scores(self, candidates_data, n_samples=100):
         """Compute BALD scores for candidate nodes"""
         if not self.is_trained:
             logger.warning("Model not trained, returning random scores")
@@ -189,13 +171,8 @@ class ActiveLearning:
         candidate_embeddings = []
         for node_id in candidates_data:
             if "x" in candidates_data[node_id]:
-                embedding = candidates_data[node_id]["x"].flatten()
+                embedding = self.embeddings[candidates_data[node_id]["x"]]
                 candidate_embeddings.append(embedding)
-            else:
-                logger.warning(f"No embedding found for node {node_id}")
-                candidate_embeddings.append(
-                    np.zeros(512),
-                )  # Default CLIP embedding size
 
         if len(candidate_embeddings) == 0:
             return np.array([])
@@ -203,12 +180,7 @@ class ActiveLearning:
         candidate_embeddings = np.array(candidate_embeddings)
 
         # Normalize using the same scaler
-        try:
-            X_scaled = self.scaler.transform(candidate_embeddings)
-        except Exception as e:
-            logger.warning(f"Scaling failed: {e}, using raw embeddings")
-            X_scaled = candidate_embeddings
-
+        X_scaled = self.scaler.transform(candidate_embeddings)
         X_tensor = torch.FloatTensor(X_scaled).to(self.device)
 
         # Get Monte Carlo predictions
@@ -275,6 +247,35 @@ class ActiveLearning:
             # Compute BALD scores
             bald_scores = self._compute_bald_scores(candidates_data)
 
+            self.model.eval()
+            test_nodes = set(self.dataset.index.values)
+            X_test = [self.embeddings[node] for node in test_nodes]
+            y_test = [self.labels[node] for node in test_nodes]
+
+            X_scaled = self.scaler.fit_transform(X_test)
+            X_tensor = torch.FloatTensor(X_scaled).to(self.device)
+            with torch.no_grad():
+                outputs = self.model(X_tensor)
+                predictions = torch.argmax(outputs, dim=1).cpu().numpy()
+
+            accuracy = np.mean(predictions == y_test)
+            logger.info(accuracy)
+
+            with open(f"output/utility_{SETUP}.csv", "a", newline="") as file:
+                writer = csv.writer(file)
+                writer.writerow(
+                    [
+                        accuracy,
+                    ],
+                )
+
+            # from matplotlib import pyplot as plt
+            # import seaborn as sns
+            # from sklearn.metrics import confusion_matrix
+            # confusion = confusion_matrix(y_test, predictions, normalize="true")
+            # sns.heatmap(confusion, cmap="Reds")
+            # plt.show()
+
             if len(bald_scores) > 0:
                 # Select candidate with highest BALD score
                 best_idx = np.argmax(bald_scores)
@@ -293,13 +294,13 @@ class ActiveLearning:
 
 
 class ImageNode(StaticNode):
-    @declared_attr
-    def embedding(cls):
-        return cls.__table__.c.get("embedding", Column(LargeBinary))
+    # @declared_attr
+    # def embedding(cls):
+    #     return cls.__table__.c.get("embedding", Column(LargeBinary))
 
     def __init__(self, *args, embedding, **kwargs):
         super().__init__(*args, **kwargs)
-        self.embedding = np.array(embedding, dtype=np.float32).tobytes()
+        # self.embedding = np.array(embedding, dtype=np.float32).tobytes()
 
 
 images = pd.read_parquet("static/mnist_complete_embeddings.parquet")
@@ -324,9 +325,9 @@ nodes = [
 
 
 class ImageTrialMaker(StaticTrialMaker):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, optimizer = None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.optimizer = ActiveLearning()
+        self.optimizer = optimizer() if optimizer is not None else None
 
     def prior_data(self):
         data = {"nodes": dict(), "participants": dict()}
@@ -370,9 +371,7 @@ class ImageTrialMaker(StaticTrialMaker):
         # Process trials for each node
         for node in nodes:
             data["nodes"][node.id] = {
-                "x": np.frombuffer(
-                    node.embedding, dtype=np.float32,
-                ).reshape(-1, node.definition["dimensions"]),
+                "x": node.definition["idx"],
                 "trials": dict(),
             }
 
@@ -449,9 +448,12 @@ class Exp(psynet.experiment.Experiment):
             id_="image_classification",
             trial_class=ImageTrial,
             nodes=nodes,
-            expected_trials_per_participant=64,
+            max_trials_per_participant=100,
+            expected_trials_per_participant=100,
             target_n_participants=1,
             recruit_mode="n_participants",
+            optimizer=ActiveLearning if SETUP == "adaptive" else None,
+
         ),
     )
 
