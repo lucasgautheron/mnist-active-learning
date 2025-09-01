@@ -7,7 +7,7 @@ The experiment selects optimal images to annotate
 using [Bayesian Active Learning by Disagreement (BALD)](https://arxiv.org/abs/1703.02910).
 This strategy consists in choosing samples for which the classifier prediction is ambiguous due to model uncertainty.
 The uncertainty of the model is assessed by leveraging [Dropout layers](https://arxiv.org/abs/1506.02142).
-The classification relies on pre-computed Vision Transformer
+The classifier relies on pre-computed Vision Transformer
 embeddings ([clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32)).
 
 <div style="display: flex; justify-content: space-around;">
